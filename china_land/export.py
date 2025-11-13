@@ -6,7 +6,8 @@ import json
 import re
 from html import unescape
 from pathlib import Path
-from typing import Iterable
+from typing import Any, Dict, List, Optional
+from collections import defaultdict
 
 BASE_DATA_URL = "http://szb.iziran.net/dataFile"
 
@@ -50,7 +51,7 @@ def clean_html(text: Optional[str]) -> str:
     return "\n".join(cleaned_lines).strip()
 
 
-def extract_images(html: str | None) -> list[dict[str, str]]:
+def extract_images(html: str | None) -> list[Dict[str, str]]:
     if not html:
         return []
     images: List[Dict[str, str]] = []
@@ -63,7 +64,7 @@ def extract_images(html: str | None) -> list[dict[str, str]]:
     return images
 
 
-def render_article(article: dict[str, any]) -> str:
+def render_article(article: Dict[str, Any]) -> str:
     index_raw = article.get("index")
     try:
         index_str = f"{int(index_raw):03d}"
@@ -101,8 +102,8 @@ def render_article(article: dict[str, any]) -> str:
 
 
 def write_issue_markdown(
-    magazine_meta: dict[str, any],
-    articles: list[dict[str, any]],
+    magazine_meta: Dict[str, Any],
+    articles: List[Dict[str, Any]],
     output_dir: Path,
     prefix: str,
     fallback_name: str | None = None,
@@ -133,10 +134,111 @@ def write_issue_markdown(
     return output_path
 
 
-def generate_markdown(input_path: Path, output_dir: Path, prefix: str) -> list[Path]:
+def write_article_separately(
+    article: Dict[str, Any],
+    magazine_meta: Dict[str, Any],
+    output_dir: Path,
+    prefix: str,
+) -> Path:
+    year = magazine_meta.get("year", "")
+    page_name = magazine_meta.get("pageName", "")
+    index_raw = article.get("index")
+    try:
+        index_str = f"{int(index_raw):03d}"
+    except (TypeError, ValueError):
+        index_str = str(index_raw)
+    title = normalise_whitespace(article.get("title") or "")
+    safe_name = re.sub(r"[^0-9A-Za-z\u4e00-\u9fff\-（）()第期年月日 ]", "_", f"{year}_{page_name}_{index_str}_{title}".strip())
+    filename = f"{prefix}_{safe_name}.md"
+    output_path = output_dir / filename
+    content = render_article(article)
+    output_path.write_text(content + "\n", encoding="utf-8")
+    return output_path
+
+
+def write_issue_articles_separately(
+    magazine_meta: Dict[str, Any],
+    articles: List[Dict[str, Any]],
+    output_dir: Path,
+    prefix: str,
+) -> List[Path]:
+    paths = []
+    for article in articles:
+        article["magazine_meta"] = magazine_meta  # For consistency, though used in call
+        paths.append(write_article_separately(article, magazine_meta, output_dir, prefix))
+    return paths
+
+
+def write_year_markdown(
+    year: str,
+    magazines: List[Dict[str, Any]],
+    all_articles: List[Dict[str, Any]],
+    output_dir: Path,
+    prefix: str,
+) -> Path:
     output_dir.mkdir(parents=True, exist_ok=True)
-    magazines: dict[str, dict[str, any]] = {}
-    articles_by_mag: dict[str, list[dict[str, any]]] = {}
+    lines: List[str] = [f"# {prefix} {year} 全年文章"]
+    # Group articles by magazine
+    articles_by_mag: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+    for article in all_articles:
+        mag_id = article.get("magazine_id")
+        if mag_id:
+            articles_by_mag[mag_id].append(article)
+    for mag in sorted(magazines, key=lambda m: m.get("date", "")):
+        mag_lines = [f"\n## {normalise_whitespace(mag.get('title') or '')} ({mag.get('date', '')})"]
+        mag_articles = sorted(articles_by_mag.get(mag["id"], []), key=lambda x: x.get("index") or 0)
+        for article in mag_articles:
+            mag_lines.append(render_article(article))
+            mag_lines.append("---")
+        if mag_lines and mag_lines[-1] == "---":
+            mag_lines.pop()
+        lines.extend(mag_lines)
+    safe_year = re.sub(r"[^0-9A-Za-z]", "_", year)
+    filename = f"{prefix}_{safe_year}_full.md"
+    output_path = output_dir / filename
+    output_path.write_text("\n".join(lines).strip() + "\n", encoding="utf-8")
+    return output_path
+
+
+def write_all_markdown(
+    years: List[str],
+    year_magazines: List[tuple[str, List[Dict[str, Any]]]],
+    all_articles: List[Dict[str, Any]],
+    output_dir: Path,
+    prefix: str,
+) -> Path:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    lines: List[str] = [f"# {prefix} 全量文章"]
+    # Group by year then magazine
+    articles_by_year_mag: Dict[str, Dict[str, List[Dict[str, Any]]]] = defaultdict(lambda: defaultdict(list))
+    for article in all_articles:
+        year = article.get("year")
+        mag_id = article.get("magazine_id")
+        if year and mag_id:
+            articles_by_year_mag[year][mag_id].append(article)
+    for year in years:
+        year_lines = [f"\n# {year} 年"]
+        mags = [m for y, ms in year_magazines if y == year for m in ms]
+        for mag in sorted(mags, key=lambda m: m.get("date", "")):
+            mag_lines = [f"\n## {normalise_whitespace(mag.get('title') or '')} ({mag.get('date', '')})"]
+            mag_articles = sorted(articles_by_year_mag[year].get(mag["id"], []), key=lambda x: x.get("index") or 0)
+            for article in mag_articles:
+                mag_lines.append(render_article(article))
+                mag_lines.append("---")
+            if mag_lines and mag_lines[-1] == "---":
+                mag_lines.pop()
+            year_lines.extend(mag_lines)
+        lines.extend(year_lines)
+    filename = f"{prefix}_all_full.md"
+    output_path = output_dir / filename
+    output_path.write_text("\n".join(lines).strip() + "\n", encoding="utf-8")
+    return output_path
+
+
+def generate_markdown(input_path: Path, output_dir: Path, prefix: str) -> List[Path]:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    magazines: Dict[str, Dict[str, Any]] = {}
+    articles_by_mag: Dict[str, List[Dict[str, Any]]] = {}
     with input_path.open(encoding="utf-8") as file:
         for line in file:
             if not line.strip():
@@ -153,7 +255,7 @@ def generate_markdown(input_path: Path, output_dir: Path, prefix: str) -> list[P
                     "title": magazine.get("title") or magazine.get("subject") or "",
                 }
             articles_by_mag.setdefault(magazine_id, []).append(record["article"])
-    output_files: list[Path] = []
+    output_files: List[Path] = []
     for magazine_id, meta in magazines.items():
         articles = sorted(articles_by_mag.get(magazine_id, []), key=lambda x: x.get("index") or 0)
         output_files.append(write_issue_markdown(meta, articles, output_dir, prefix))

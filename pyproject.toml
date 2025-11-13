@@ -1,18 +1,29 @@
 [build-system]
-requires = ["setuptools>=65", "wheel"]
+requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "china-land-gui"
-version = "1.0.0"
+version = "1.1.0"
 description = "中国土地期刊爬虫 GUI 工具"
-authors = [{ name = "ViVi141", email = "747384120@qq.com" }]
 readme = "README.md"
+license = {file = "LICENSE"}
+authors = [
+    {name = "ViVi141", email = "747384120@qq.com"},
+]
 requires-python = ">=3.10"
 dependencies = [
-    "requests>=2.32,<3.0",
+    "requests>=2.31.0",
 ]
-license = { text = "GPL-2.0-only" }
+
+[project.optional-dependencies]
+dev = [
+    "ruff>=0.1.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/ViVi141/china-land-gui"
+Repository = "https://github.com/ViVi141/china-land-gui"
 
 [project.scripts]
 china-land-gui = "china_land.gui:main"
