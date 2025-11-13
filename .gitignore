@@ -1,0 +1,28 @@
+# Bytecode / cache
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# IDE / Editor configs
+.idea/
+.vscode/
+*.code-workspace
+
+# Build & packaging
+build/
+dist/
+*.egg-info/
+*.spec
+
+# Logs / temp
+*.log
+cookies.txt
+*** End Patch
+

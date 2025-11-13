@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=65", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "china-land-gui"
+version = "1.0.0"
+description = "中国土地期刊爬虫 GUI 工具"
+authors = [{ name = "ViVi141", email = "747384120@qq.com" }]
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "requests>=2.32,<3.0",
+]
+license = { text = "GPL-2.0-only" }
+
+[project.scripts]
+china-land-gui = "china_land.gui:main"
+
+[tool.setuptools.packages.find]
+include = ["china_land"]
+
